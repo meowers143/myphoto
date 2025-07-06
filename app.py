@@ -3,74 +3,68 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from PIL import Image
-# import piexif # For extracting EXIF data
-# from google.cloud import vision # For Google Cloud Vision API
 
-# Load environment variables (for local development)
+# For local development of environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
+# --- Cloudinary / Cloud Storage Placeholders ---
+# In a real production app, you MUST integrate a cloud storage solution.
+# Cloudinary is highly recommended for image management.
+# For now, we'll use a dummy URL for display until you integrate it.
+# Example Cloudinary integration (you would uncomment and set these up properly):
+# import cloudinary
+# import cloudinary.uploader
+#
+# cloudinary.config(
+#     cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
+#     api_key = os.environ.get('CLOUDINARY_API_KEY'),
+#     api_secret = os.environ.get('CLOUDINARY_API_SECRET'),
+#     secure = True
+# )
+
 app = Flask(__name__)
 
-# --- Database Configuration ---
-# Use PostgreSQL for Render deployment, SQLite for local development
+# --- Configuration ---
+# Use DATABASE_URL for Render (PostgreSQL), fallback to SQLite for local development
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
 
-# --- Image Upload Configuration ---
-# In a real app, use S3, GCS, or Cloudinary.
-# For this example, we'll use a local 'uploads' folder.
-UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a_very_secret_key_for_dev') # Replace with strong secret key in production
+# Ensure SECRET_KEY is set. Crucial for sessions and flashes.
+# For production on Render, set this as an environment variable!
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a_very_strong_and_random_secret_key_for_dev_only_replace_me')
+
+db = SQLAlchemy(app)
 
 # --- Database Model ---
 class Photo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False)
+    # Store the URL to the image in cloud storage, not local path
+    image_url = db.Column(db.String(500), nullable=False)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
-    # Add columns for auto-organization features
     category = db.Column(db.String(100), default='Uncategorized')
     tags = db.Column(db.String(500), default='') # Comma-separated tags
-    # Add more metadata fields as needed (e.g., date_taken, camera_model)
 
     def __repr__(self):
         return f'<Photo {self.filename}>'
 
-# Create database tables (run once, e.g., in a separate script or on app startup)
-# In production, use Flask-Migrate or a similar tool.
+# Create database tables
+# This will create tables if they don't exist.
+# For production, consider using Flask-Migrate for better schema management.
 with app.app_context():
     db.create_all()
 
 # --- Helper for Auto-Organization ---
-def auto_organize_photo(image_path):
-    # This is where your auto-organization logic will go.
-    # For now, it's a placeholder.
-
+# This function will eventually work with image data fetched from cloud storage
+# or by sending the image stream directly to a cloud AI service.
+def auto_organize_photo(image_file_stream, original_filename):
     category = 'Uncategorized'
     tags = []
 
     try:
-        img = Image.open(image_path)
-
-        # Example 1: Basic EXIF data extraction (requires piexif)
-        # if 'exif' in img.info:
-        #     exif_dict = piexif.load(img.info['exif'])
-        #     if piexif.ImageIFD.DateTimeOriginal in exif_dict['0th']:
-        #         date_taken = exif_dict['0th'][piexif.ImageIFD.DateTimeOriginal].decode('utf-8')
-        #         # You can parse this date and use it for organization
-        #         # For simplicity, we'll just add it to tags here
-        #         tags.append(f"date:{date_taken.split(' ')[0].replace(':', '-')}")
-        #     if piexif.ImageIFD.Make in exif_dict['0th']:
-        #         tags.append(f"camera:{exif_dict['0th'][piexif.ImageIFD.Make].decode('utf-8').strip()}")
-        #     if piexif.ImageIFD.Model in exif_dict['0th']:
-        #         tags.append(f"model:{exif_dict['0th'][piexif.ImageIFD.Model].decode('utf-8').strip()}")
-
-        # Example 2: Simple categorization based on filename (very basic)
-        filename_lower = os.path.basename(image_path).lower()
+        # Example 1: Basic categorization based on filename (very basic)
+        filename_lower = original_filename.lower()
         if "nature" in filename_lower:
             category = "Nature"
         elif "people" in filename_lower or "person" in filename_lower:
@@ -80,22 +74,21 @@ def auto_organize_photo(image_path):
         else:
             category = "Other"
 
-        # Example 3: Using a cloud vision API (requires google-cloud-vision)
-        # client = vision.ImageAnnotatorClient()
-        # with open(image_path, 'rb') as image_file:
-        #     content = image_file.read()
-        # image = vision.Image(content=content)
-        # response = client.label_detection(image=image)
-        # labels = response.label_annotations
-        # for label in labels:
-        #     tags.append(label.description)
-        #     if 'animal' in label.description.lower(): # Example: categorize based on detected labels
-        #         category = "Animals"
-        #     # You'd have more sophisticated logic here
+        # IMPORTANT: For real auto-organization, you would:
+        # A) Use an image processing library (Pillow, OpenCV) on the image_file_stream
+        #    OR
+        # B) Send the image_file_stream (or its cloud URL) to a cloud AI API like
+        #    Google Cloud Vision API or AWS Rekognition for advanced tagging/categorization.
+        #
+        # Example with Pillow (assuming image_file_stream is a BytesIO object or similar):
+        # from io import BytesIO
+        # img = Image.open(BytesIO(image_file_stream.read()))
+        # You can then process 'img' object.
+        # Remember to reset stream position after reading: image_file_stream.seek(0)
 
     except Exception as e:
         print(f"Error during auto-organization: {e}")
-        # Fallback to default category and tags
+        # Fallback to default category and tags if anything goes wrong
     
     return category, ", ".join(tags)
 
@@ -103,10 +96,6 @@ def auto_organize_photo(image_path):
 @app.route('/')
 def index():
     photos = Photo.query.order_by(Photo.upload_date.desc()).all()
-    # You might want to group photos by category here for display
-    # E.g., photos_by_category = {}
-    # for photo in photos:
-    #     photos_by_category.setdefault(photo.category, []).append(photo)
     return render_template('index.html', photos=photos)
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -119,16 +108,42 @@ def upload_photo():
         if file.filename == '':
             flash('No selected file')
             return redirect(request.url)
+        
         if file:
-            filename = file.filename
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
+            original_filename = file.filename
+            
+            # --- CRITICAL CHANGE: Simulate Cloud Upload / Placeholder ---
+            # In a real app, 'file' would be uploaded to Cloudinary, S3, etc.
+            # cloudinary.uploader.upload(file) would return a dict with 'url'.
+            # For this *fixed* example, we'll use a dummy URL for display.
+            # You *must* replace this with actual cloud storage integration.
 
-            # Auto-organize the photo
-            category, tags = auto_organize_photo(file_path)
+            # Dummy URL for demonstration purposes.
+            # In your actual implementation, this will be the URL returned by Cloudinary/S3.
+            # For testing, you could use a public image URL or set up Cloudinary.
+            image_public_url = "https://via.placeholder.com/250x150?text=Your+Image+Here" # Placeholder
+            
+            # If using Cloudinary:
+            # try:
+            #     upload_result = cloudinary.uploader.upload(file)
+            #     image_public_url = upload_result['secure_url']
+            # except Exception as e:
+            #     flash(f"Error uploading to cloud storage: {e}")
+            #     return redirect(request.url)
+
+            # Auto-organize the photo (pass the file stream or URL to it)
+            # For this example, we pass the file stream for local processing placeholder.
+            # In production, you might pass image_public_url to an AI API.
+            file.seek(0) # Reset stream position after potential initial read by werkzeug
+            category, tags = auto_organize_photo(file.stream, original_filename)
 
             # Save photo metadata to database
-            new_photo = Photo(filename=filename, category=category, tags=tags)
+            new_photo = Photo(
+                filename=original_filename, # Original name for display
+                image_url=image_public_url, # URL to the image in cloud storage
+                category=category,
+                tags=tags
+            )
             db.session.add(new_photo)
             db.session.commit()
 
@@ -136,11 +151,10 @@ def upload_photo():
             return redirect(url_for('index'))
     return render_template('upload.html')
 
-# Serve uploaded images (for local development only, in production use cloud storage URLs)
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return redirect(url_for('static', filename='uploads/' + filename))
-
+# Removed local '/uploads/<filename>' route because images will be served from cloud storage.
+# The `image_url` in the Photo model will directly point to the public URL.
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Set host to '0.0.0.0' for local testing within Docker/VMs if needed,
+    # but for typical local dev, '127.0.0.1' or no host is fine.
+    app.run(debug=True, host='0.0.0.0' if os.environ.get('FLASK_ENV') == 'development' else '127.0.0.1')
