@@ -1,0 +1,5 @@
+Flask
+Flask-SQLAlchemy
+Pillow
+python-dotenv # For local development environment variables
+gunicorn # For production deployment on Render
