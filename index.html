@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Photo Album</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>My Photo Album</h1>
+        <p><a href="{{ url_for('upload_photo') }}">Upload New Photo</a></p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="flashes">
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <div class="photo-grid">
+            {% for photo in photos %}
+            <div class="photo-item">
+                <img src="{{ url_for('uploaded_file', filename=photo.filename) }}" alt="{{ photo.filename }}">
+                <p><strong>{{ photo.filename }}</strong></p>
+                <p>Uploaded: {{ photo.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                <p>Category: {{ photo.category }}</p>
+                <p>Tags: {{ photo.tags }}</p>
+            </div>
+            {% else %}
+            <p>No photos uploaded yet. Go ahead and upload one!</p>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
