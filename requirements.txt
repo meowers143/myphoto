@@ -1,5 +1,6 @@
 Flask
 Flask-SQLAlchemy
 Pillow
-python-dotenv # For local development environment variables
-gunicorn # For production deployment on Render
+python-dotenv
+gunicorn
+psycopg2-binary  # <--- ADD THIS LINE FOR POSTGRESQL CONNECTIVITY
